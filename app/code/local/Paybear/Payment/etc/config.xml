@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<config>
+    <modules>
+        <Paybear_Payment>
+            <version>0.1.0</version>
+        </Paybear_Payment>
+    </modules>
+    <global>
+        <helpers>
+            <paybear>
+                <class>Paybear_Payment_Helper</class>
+            </paybear>
+        </helpers>
+
+        <blocks>
+            <paybear>
+                <class>Paybear_Payment_Block</class>
+            </paybear>
+        </blocks>
+
+        <models>
+            <paybear>
+                <class>Paybear_Payment_Model</class>
+                <resourceModel>paybear_resource</resourceModel>
+            </paybear>
+
+            <paybear_resource>
+                <class>Paybear_Payment_Model_Resource</class>
+                <entities>
+                    <payment>
+                        <table>paybear_payment</table>
+                    </payment>
+                </entities>
+            </paybear_resource>
+        </models>
+
+        <resources>
+            <paybear_setup>
+                <setup>
+                    <module>Paybear_Payment</module>
+                    <class>Paybear_Payment_Model_Resource_Setup</class>
+                </setup>
+            </paybear_setup>
+        </resources>
+    </global>
+
+    <default>
+        <payment>
+            <paybear>
+                <active>1</active>
+                <model>paybear/payment_method</model>
+                <order_status>pending</order_status>
+                <title>Crypto Payments </title>
+                <allowspecific>0</allowspecific>
+                <payment_action>sale</payment_action>
+            </paybear>
+        </payment>
+    </default>
+
+    <frontend>
+        <routers>
+            <pabear>
+                <use>standard</use>
+                <args>
+                    <module>Paybear_Payment</module>
+                    <frontName>paybear</frontName>
+                </args>
+            </pabear>
+        </routers>
+    </frontend>
+</config>
