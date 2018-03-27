@@ -7,4 +7,8 @@ class Paybear_Payment_IndexController extends Mage_Core_Controller_Front_Action
         $payment = Mage::getModel('paybear/payment');
         echo get_class($payment);
     }
+
+    public function testAction() {
+        echo Mage::helper('paybear')->getApiDomain();
+    }
 }

@@ -2,7 +2,7 @@
 <config>
     <modules>
         <Paybear_Payment>
-            <version>0.1.0</version>
+            <version>0.1.4</version>
         </Paybear_Payment>
     </modules>
     <global>
@@ -30,6 +30,9 @@
                     <payment>
                         <table>paybear_payment</table>
                     </payment>
+                    <paymenttxn>
+                        <table>paybear_payment_txn</table>
+                    </paymenttxn>
                 </entities>
             </paybear_resource>
         </models>
@@ -42,6 +45,17 @@
                 </setup>
             </paybear_setup>
         </resources>
+        <events>
+            <admin_system_config_changed_section_payment>
+                <observers>
+                    <paybear_payments>
+                        <type>singleton</type>
+                        <class>paybear/observer_config</class>
+                        <method>adminSaveSettingsPaybear</method>
+                    </paybear_payments>
+                </observers>
+            </admin_system_config_changed_section_payment>
+        </events>
     </global>
 
     <default>
@@ -53,6 +67,7 @@
                 <title>Crypto Payments </title>
                 <allowspecific>0</allowspecific>
                 <payment_action>sale</payment_action>
+                <testnet>0</testnet>
             </paybear>
         </payment>
     </default>

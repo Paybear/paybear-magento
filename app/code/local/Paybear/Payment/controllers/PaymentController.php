@@ -26,9 +26,11 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                 'protect_code' => $order->getProtectCode()
             ]),
             'redirect' => Mage::getUrl('checkout/onepage/success'),
-            'fiatValue' => (float)$order->getGrandTotal(),
-            'currencyIso' => $order->getOrderCurrencyCode(),
-            'currencySign' => Mage::app()->getLocale()->currency($order->getOrderCurrencyCode())->getSymbol(),
+            'fiat_value' => (float)$order->getGrandTotal(),
+            'currency_iso' => $order->getOrderCurrencyCode(),
+            'currency_sign' => Mage::app()->getLocale()->currency($order->getOrderCurrencyCode())->getSymbol(),
+            'overpayment' => Mage::getStoreConfig('payment/paybear/minoverpaymentfiat'),
+            'underpayment' => Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat'),
         ]);
 
         $this->getLayout()->getBlock('head')->addCss('css/paybear.css');
@@ -73,139 +75,208 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         $this->getResponse()->setBody(Mage::helper('core')->jsonEncode($data));
     }
 
-    public function statusAction()
-    {
+    public function statusAction () {
+
         $orderId = $this->getRequest()->get('order');
 
         if (!$orderId) {
             Mage::throwException($this->__('Order not found'));
         }
 
-        $protectCode = $this->getRequest()->get('protect_code');
-
         $order = new Mage_Sales_Model_Order();
         $order->loadByIncrementId($orderId);
 
-        /** @var Paybear_Payment_Model_Payment $model */
-        $model = Mage::getModel('paybear/payment');
+        $paybear_payment = Mage::getModel('paybear/payment');
+        $paybear_payment->load($order->getIncrementId(), 'order_increment_id');
 
-        // if ($order->getProtectCode() != $protectCode) {
-        //     Mage::throwException($this->__('Order not found.'));
-        // }
+        $payment_txn = Mage::getModel('paybear/paymenttxn');
 
-        $model->load($order->getIncrementId(), 'order_increment_id');
-
-        // $minConfirmations = Configuration::get('PAYBEAR_' . strtoupper($paybearData->token) . '_CONFIRMATIONS');;
-        $maxConfirmations = $model->getMaxConfirmations();
-        $confirmations = $model->getConfirmations();
+        $maxConfirmations = $paybear_payment->getMaxConfirmations();
         $data = array();
-        if ($confirmations >= $maxConfirmations) { //set max confirmations
+
+        $totalConfirmations = $payment_txn->getTxnConfirmations($orderId);
+        $totalConfirmed     = $payment_txn->getTotalConfirmed($orderId, $maxConfirmations);
+
+        if (($totalConfirmations >= $maxConfirmations) && ($totalConfirmed >= $paybear_payment->amount )) { //set max confirmations
             $data['success'] = true;
         } else {
             $data['success'] = false;
         }
 
-        if (is_numeric($confirmations)) {
-            $data['confirmations'] = $confirmations;
+        if (is_numeric($totalConfirmations)) {
+            $data['confirmations'] = $totalConfirmations;
+        }
+
+        $coinsPaid = $payment_txn->getTotalPaid($orderId);
+
+        if ($coinsPaid) {
+            $data['coinsPaid'] = $coinsPaid;
+
+            $underpayment = $paybear_payment->getAmount() - $coinsPaid;
+            $email_flag   =  $paybear_payment->getEmailStatus();
+            if (($underpayment > 0) && (empty($email_flag))) {
+
+                if ($paybear_payment->sendEmail('underpayment', $underpayment, $paybear_payment->getToken(), $order )) {
+                    $paybear_payment->setEmailStatus(1);
+                    $paybear_payment->save();
+                }
+            }
         }
 
         $this->getResponse()->setBody(Mage::helper('core')->jsonEncode($data));
     }
 
-    public function callbackAction()
-    {
-        $orderId = $this->getRequest()->get('order');
-        $protectCode = $this->getRequest()->get('protect_code');
+    public function callbackAction () {
+        $orderId = $this->getRequest()->getParam('order');
+
+
         $order = new Mage_Sales_Model_Order();
         $order->loadByIncrementId($orderId);
 
-        if (!$order->getIncrementId() || $order->getProtectCode() != $protectCode) {
+        if (!$order->getIncrementId()) {
             Mage::throwException($this->__('Order not found.'));
         }
 
         $currency = $order->getOrderCurrency();
 
-        $model = Mage::getModel('paybear/payment');
-        $model->load($orderId, 'order_increment_id');
+        $paybear_payment = Mage::getModel('paybear/payment');
+        $paybear_payment = $paybear_payment->load($orderId, 'order_increment_id');
 
-        if (!$model->getToken()) {
+        if (!$paybear_payment->getToken()) {
             Mage::throwException($this->__('Order not found.'));
         }
 
-        // $customer = $order->getCustomer();
-        // $sdk = new PayBearSDK($this->context);
-
-        $data = file_get_contents('php://input');
+        $payment_txn = Mage::getModel('paybear/paymenttxn');
 
         if (!in_array($order->getStatus(), array(
             Mage::getStoreConfig('payment/paybear/order_status'),
             Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status'),
+            Mage::getStoreConfig('payment/paybear/mispaid_status')
         ))) {
             return;
         }
 
+        $data = file_get_contents('php://input');
+
         if ($data) {
+
             $params = json_decode($data);
-            $maxConfirmations = $model->getMaxConfirmations();
+
+
+
+            $maxConfirmations = $paybear_payment->getMaxConfirmations();
             $invoice = $params->invoice;
 
-            $model->confirmations = $params->confirmations;
-            $model->save();
+            $maxDifference_fiat = Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat');
+            $maxDifference_coins = 0;
 
-            // PrestaShopLogger::addLog(sprintf('PayBear: incoming callback. Confirmations - %d', $params->confirmations), 1, null, 'Order', $order->id, true);
+            if($maxDifference_fiat) {
+                $maxDifference_coins = round($maxDifference_fiat/$paybear_payment->getRate($params->blockchain) , 8);
+                $maxDifference_coins = max($maxDifference_coins, 0.00000001);
+            }
 
-            if ($params->confirmations >= $maxConfirmations) {
-                $toPay = $model->getAmount();
-                $amountPaid = $params->inTransaction->amount / pow(10, $params->inTransaction->exp);
-                $maxDifference = 0.00000001;
-                // $paybear = Module::getInstanceByName('paybear');
+            if ($params->invoice == $paybear_payment->invoice) {
 
-                // PrestaShopLogger::addLog(sprintf('PayBear: to pay %s', $toPay), 1, null, 'Order', $order->id, true);
-                // PrestaShopLogger::addLog(sprintf('PayBear: paid %s', $amountPaid), 1, null, 'Order', $order->id, true);
-                // PrestaShopLogger::addLog(sprintf('PayBear: maxDifference %s', $maxDifference), 1, null, 'Order', $order->id, true);
+                $paybear_payment->setTxn($params, $paybear_payment->getPaybearId());
 
-                $orderStatus = Mage::getStoreConfig('payment/paybear/mispaid_status'); //Configuration::get('PAYBEAR_OS_MISPAID');
-                $message = false;
 
-                if ($toPay > 0 && ($toPay - $amountPaid) < $maxDifference) {
-                    $orderTimestamp = strtotime($order->date_add);
-                    $paymentTimestamp = strtotime($model->getPaidAt());
-                    $deadline = $orderTimestamp + Mage::getStoreConfig('payment/paybear/exchange_locktime') * 60;
-                    $orderStatus = Mage_Sales_Model_Order::STATE_PAYMENT_REVIEW;
+                $hash = $params->inTransaction->hash;
 
-                    if ($paymentTimestamp > $deadline) {
-                        $orderStatus = Configuration::get('PAYBEAR_OS_LATE_PAYMENT_RATE_CHANGED');
+                $confirmations = $paybear_payment->confirmations;
 
-                        $fiatPaid = $amountPaid * $model->getRate($params->blockchain);
-                        if ($order->total_paid < $fiatPaid) {
-                            $message = sprintf('Late Payment / Rate changed (%s %s paid, %s %s expected)', $fiatPaid, $currency->iso_code, $order->total_paid, $currency->iso_code);
-                        } else {
-                            $orderStatus = Mage_Sales_Model_Order::STATE_PAYMENT_REVIEW;
-
-                            $order->addStatusHistoryComment($message, $orderStatus);
-                            $order->save();
-                        }
-                    }
+                if (!$confirmations) {
+                    $confirmations = array();
                 } else {
-                    // PrestaShopLogger::addLog(sprintf('PayBear: wrong amount %s', $amountPaid), 2, null, 'Order', $order->id, true);
-                    $underpaid = round(($toPay-$amountPaid)*$model->getRate($params->blockchain), 2);
-                    $message = sprintf('Wrong Amount Paid (%s %s received, %s %s expected) - %s %s underpaid', $amountPaid, $params->blockchain, $toPay, $params->blockchain, $currency->sign, $underpaid);
+                    $confirmations = json_decode($confirmations, true);
                 }
 
-                // $order->setState(Mage_Sales_Model_Order::STATE_CANCELED);
-                $order->addStatusHistoryComment($message, $orderStatus);
-                $order->save();
+                $confirmations[$hash] = $params->confirmations;
 
-                echo $invoice; //stop further callbacks
-                die();
-            } elseif ($order->getStatus() != Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status')) {
-                $model->setPaidAt(date('Y-m-d H:i:s'));
-                $model->save();
+                $paybear_payment->confirmations = json_encode($confirmations);
+                $paybear_payment->save();
 
-                $order->addStatusHistoryComment('', Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status'));
-                $order->save();
+                $toPay = $paybear_payment->getAmount();
+
+                $amountPaid = $params->inTransaction->amount / pow(10, $params->inTransaction->exp);
+
+                $totalConfirmations = $payment_txn->getTxnConfirmations($orderId);
+
+                if ($totalConfirmations >= $maxConfirmations) {
+
+                    //avoid race conditions
+                    $transactionIndex = array_search($hash, array_keys($confirmations));
+                    if ($transactionIndex>0) sleep($transactionIndex*1);
+
+                    $totalConfirmed =  $payment_txn->getTotalConfirmed($orderId, $maxConfirmations);
+
+
+                    if (($toPay > 0 && ($toPay - $amountPaid) < $maxDifference_coins)  || (($toPay - $totalConfirmed) < $maxDifference_coins ) ) {
+
+                        $orderTimestamp   = strtotime($order->getData('created_at'));
+                        $paymentTimestamp = strtotime($paybear_payment->getPaidAt());
+                        $deadline         = $orderTimestamp + Mage::getStoreConfig('payment/paybear/exchange_locktime') * 60;
+
+                        if ($paymentTimestamp > $deadline) {
+                            $orderStatus = Mage::getStoreConfig('payment/paybear/late_payment_status');
+
+                            $fiatPaid = $totalConfirmed * $paybear_payment->getRate($params->blockchain);
+                            if ((float) $fiatPaid < $order->getData('grand_total')) {
+                                $message = sprintf('Late Payment / Rate changed (%s %s paid, %s %s expected)', round($fiatPaid,2), $currency->getData('currency_code'), $order->getData('grand_total'), $currency->getData('currency_code'));
+                                $order->addStatusHistoryComment($message, $orderStatus);
+                                $order->save();
+                            }
+                        }
+
+                        $order->setState(Mage_Sales_Model_Order::STATE_PROCESSING);
+                        $message = sprintf('Amount Paid: %s, Blockchain: %s. ', $totalConfirmed, $params->blockchain);
+
+                        $history = $order->addStatusHistoryComment($message, Mage_Sales_Model_Order::STATE_PROCESSING);
+
+                        $history->setIsCustomerNotified(false);
+                        $order->save();
+
+                        //check overpaid
+                        $minoverpaid = Mage::getStoreConfig('payment/paybear/minoverpaymentfiat');
+                        $overpaid    =  (round(($totalConfirmed - $toPay)*$paybear_payment->getRate($params->blockchain), 2));
+                        if ( ($minoverpaid > 0) && ($overpaid > $minoverpaid) ) {
+
+                            if ($paybear_payment->sendEmail('overpayment', $totalConfirmed - $toPay, $paybear_payment->getToken(), $order )) {
+                                $history = $order->addStatusHistoryComment('Looks as customer has overpaid an order');
+                                $history->setIsCustomerNotified(true);
+                                $paybear_payment->setEmailStatus(1);
+                                $paybear_payment->save();
+                            }
+
+                            $order->save();
+                        }
+
+                        echo $invoice; //stop further callbacks
+                        return;
+
+                    } else {
+
+                        $orderStatus = Mage::getStoreConfig('payment/paybear/mispaid_status');
+                        $underpaid = round(($toPay- $totalConfirmed)*$paybear_payment->getRate($params->blockchain), 2);
+                        $message = sprintf('Wrong Amount Paid (%s %s is received, %s %s is expected) - %s %s is underpaid', $amountPaid, $params->blockchain, $toPay, $params->blockchain, $currency->getData('currency_code'), $underpaid);
+                        $order->addStatusHistoryComment($message, $orderStatus);
+                        $order->save();
+                    }
+
+                } else {
+                    $unconfirmedTotal = $payment_txn->getTotalUnconfirmed($orderId, $maxConfirmations);
+
+                    $paybear_payment->setPaidAt(date('Y-m-d H:i:s'));
+                    $paybear_payment->save();
+
+                    $massage = sprintf('%s Awaiting confirmation. Total Unconfirmed: %s %s', date('Y-m-d H:i:s'), $unconfirmedTotal, $params->blockchain );
+                    $order->addStatusHistoryComment($massage, Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status'));
+                    $order->save();
+
+                }
             }
         }
-        die();
+
+        return;
     }
+
 }
