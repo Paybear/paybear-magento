@@ -14,7 +14,7 @@ if(!$emailTemplate->getId()){
     $sql = "INSERT INTO {$this->getTable('core_email_template')} (template_code, template_text, template_type, template_subject, template_sender_name, template_sender_email, added_at, modified_at) VALUES
     ('$templateId', '<body style=\"background:#FFFFFF; font-family:Verdana, Arial, Helvetica, sans-serif; font-size:12px; margin:0; padding:0;\">
 <div style=\"background:#FFFFFF; font-family:Verdana, Arial, Helvetica, sans-serif; font-size:12px; margin:0; padding:0;\">
-<p>Looks like you underpaid {{var cryptopaid}} {{var token}},</p>
+<p>Looks like you underpaid {{var cryptopaid}} {{var token}} ({{var fiat_paid}} {{var fiat_currency}}),</p>
 <p>Don\'t worry, here is what to do next:</p>
 
 <p>Contact the merchant directly and<p>
@@ -24,7 +24,7 @@ if(!$emailTemplate->getId()){
 
 <p>Tips for Paying with Crypto:</p>
 
-<p>Tip 1) When paying, ensure you send the correct amount in {{var fiat_currency}}. Do not manually enter the {{var fiat_currency}} Value. </p>
+<p>Tip 1) When paying, ensure you send the correct amount in {{var token}}. Do not manually enter the {{var fiat_currency}} Value. </p>
 
 <p>Tip 2)  If you are sending from an exchange, be sure to correctly factor in their withdrawal fees.</p>
 

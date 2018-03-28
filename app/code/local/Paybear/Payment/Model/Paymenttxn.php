@@ -13,9 +13,10 @@ class Paybear_Payment_Model_Paymenttxn extends Mage_Core_Model_Abstract
         $txns = $this->getCollection()
             ->addFieldToFilter('order_id', $order_id);
         $confirmations = array();
-        foreach ($txns as $txn) {
-            $confirmations[] = $txn->confirmations;
-        }
+        if ($txns->getSize() > 0)
+            foreach ($txns as $txn) {
+                $confirmations[] = $txn->confirmations;
+            }
 
         return (count($confirmations)) ? min($confirmations) : null ;
     }
@@ -25,11 +26,12 @@ class Paybear_Payment_Model_Paymenttxn extends Mage_Core_Model_Abstract
         $txns = $this->getCollection()
             ->addFieldToFilter('order_id', $order_id);
         $totalConfirmed = 0;
-        foreach ($txns as $txn) {
-            if ($txn->getConfirmations() >= $maxConfirmations) {
-                $totalConfirmed += $txn->getTxnAmount();
+        if ($txns->getSize() > 0)
+            foreach ($txns as $txn) {
+                if ($txn->getConfirmations() >= $maxConfirmations) {
+                    $totalConfirmed += $txn->getTxnAmount();
+                }
             }
-        }
 
         return $totalConfirmed;
     }
@@ -38,11 +40,12 @@ class Paybear_Payment_Model_Paymenttxn extends Mage_Core_Model_Abstract
         $txns = $this->getCollection()
             ->addFieldToFilter('order_id', $order_id);
         $totalUnConfirmed = 0;
-        foreach ($txns as $txn) {
-            if ($txn->getConfirmations() < $maxConfirmations) {
-                $totalUnConfirmed += $txn->getTxnAmount();
+        if ($txns->getSize() > 0)
+            foreach ($txns as $txn) {
+                if ($txn->getConfirmations() < $maxConfirmations) {
+                    $totalUnConfirmed += $txn->getTxnAmount();
+                }
             }
-        }
 
         return $totalUnConfirmed;
     }
@@ -51,12 +54,12 @@ class Paybear_Payment_Model_Paymenttxn extends Mage_Core_Model_Abstract
         $txns = $this->getCollection()
             ->addFieldToFilter('order_id', $order_id);
         $total = 0;
-        foreach ($txns as $txn) {
-            $total += $txn->getTxnAmount();
-        }
+        if ($txns->getSize() > 0)
+            foreach ($txns as $txn) {
+                $total += $txn->getTxnAmount();
+            }
 
         return $total;
-
     }
 
 }

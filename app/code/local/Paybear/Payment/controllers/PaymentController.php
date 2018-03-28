@@ -15,7 +15,49 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
         $this->loadLayout();
 
+        /** @var Paybear_Payment_Model_Payment $model */
+        $paybear_payment = Mage::getModel('paybear/payment');
+        $currency_sign   = Mage::app()->getLocale()->currency($order->getOrderCurrencyCode())->getSymbol();
+        $overpayment     = max(Mage::getStoreConfig('payment/paybear/minoverpaymentfiat'), 0);
+        $underpayment    = max(Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat'), 0);
+
         $block = $this->getLayout()->createBlock('Mage_Core_Block_Template','paybear',array('template' => 'paybear/form.phtml'));
+        $total_paid = $paybear_payment->getAlreadyPaid($orderId);
+        $fiat_value = max((float)$order->getGrandTotal() - $total_paid, 0);
+
+        $payment_status = 'Pending Payment';
+        //$payment_status = Mage::getModel('sales/order_status')->load($order->getStatus(), 'status')->getLabel();
+        $status = $order->getStatus();
+        if ($status == 'complete' || $status == 'processing') {
+            $payment_status = 'Paid';
+        }
+
+        if ($status == 'awaiting_confirmations' && ($total_paid - $fiat_value) < $underpayment) {
+            $payment_status = 'Waiting for Confirmations';
+        } elseif ($status == 'mispaid' || ($total_paid > 0 && ($fiat_value > $underpayment) )) {
+            $payment_status = 'Partial Payment';
+        }
+
+        $order_overview = '<div>Order overview #'.$orderId.' ('.$order->getStatus().')</div>';
+        $order_overview .= '<div>Payment status - ' . $payment_status . '</div>';
+        $is_overpaid = (($total_paid - $order->getGrandTotal()) > $overpayment) ? true : false;
+
+
+
+        if ($paybear_payment->load($orderId, 'order_increment_id')->getPaybearId()) {
+            $token = $paybear_payment->getToken();
+            if ($token && $total_paid > 0 && $fiat_value > $underpayment && !$is_overpaid ) {
+                $address = $paybear_payment->getSavedAddressByToken(strtolower($token), $paybear_payment->getAddress());
+                $order_overview .= '<div>Selected token - '.strtoupper($token).'</div>';
+                $order_overview .= '<div>Payment address - '.$address.'</div>';
+                $order_overview .= '<div>Total to pay - ' . $currency_sign . $fiat_value . '</div>';
+                if ($fiat_value > 0) {
+                    $order_overview .= '<div>Paid - '. $currency_sign . $total_paid .' </div>';
+                    $order_overview .= '<div>Left to pay - ' . $currency_sign . round($fiat_value, 2) . '</div>';
+                }
+            }
+        }
+
         $block->addData([
             'currencies' => Mage::getUrl('paybear/payment/currencies', [
                 'order' => $order->getIncrementId(),
@@ -26,11 +68,13 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                 'protect_code' => $order->getProtectCode()
             ]),
             'redirect' => Mage::getUrl('checkout/onepage/success'),
-            'fiat_value' => (float)$order->getGrandTotal(),
+            //'fiat_value' => (float)$order->getGrandTotal(),
+            'fiat_value' => $fiat_value,
             'currency_iso' => $order->getOrderCurrencyCode(),
-            'currency_sign' => Mage::app()->getLocale()->currency($order->getOrderCurrencyCode())->getSymbol(),
-            'overpayment' => Mage::getStoreConfig('payment/paybear/minoverpaymentfiat'),
-            'underpayment' => Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat'),
+            'currency_sign' => $currency_sign,
+            'overpayment' => $overpayment,
+            'underpayment' => $underpayment,
+            'order_overview' => $order_overview
         ]);
 
         $this->getLayout()->getBlock('head')->addCss('css/paybear.css');
@@ -116,7 +160,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             $email_flag   =  $paybear_payment->getEmailStatus();
             if (($underpayment > 0) && (empty($email_flag))) {
 
-                if ($paybear_payment->sendEmail('underpayment', $underpayment, $paybear_payment->getToken(), $order )) {
+                if ($paybear_payment->sendEmail('underpayment', $underpayment, round($underpayment * $paybear_payment->getRate($paybear_payment->getToken()),2), $paybear_payment->getToken(), $order )) {
                     $paybear_payment->setEmailStatus(1);
                     $paybear_payment->save();
                 }
@@ -240,7 +284,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                         $overpaid    =  (round(($totalConfirmed - $toPay)*$paybear_payment->getRate($params->blockchain), 2));
                         if ( ($minoverpaid > 0) && ($overpaid > $minoverpaid) ) {
 
-                            if ($paybear_payment->sendEmail('overpayment', $totalConfirmed - $toPay, $paybear_payment->getToken(), $order )) {
+                            if ($paybear_payment->sendEmail('overpayment', $totalConfirmed - $toPay, $overpaid, $paybear_payment->getToken(), $order )) {
                                 $history = $order->addStatusHistoryComment('Looks as customer has overpaid an order');
                                 $history->setIsCustomerNotified(true);
                                 $paybear_payment->setEmailStatus(1);

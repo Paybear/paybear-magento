@@ -61,7 +61,7 @@
     <default>
         <payment>
             <paybear>
-                <active>1</active>
+                <active>0</active>
                 <model>paybear/payment_method</model>
                 <order_status>pending</order_status>
                 <title>Crypto Payments </title>

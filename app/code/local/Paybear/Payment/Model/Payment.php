@@ -37,6 +37,11 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
             $order = new Mage_Sales_Model_Order();
             $order->loadByIncrementId($orderId);
             $fiatValue = (float)$order->getGrandTotal();
+
+            if ($already_paid = $this->getAlreadyPaid($orderId,$rate)) {
+                $fiatValue = $fiatValue - $already_paid;
+            }
+
             $coinsValue = round($fiatValue / $rate, 8);
 
             $currencies = $this->getCurrencies();
@@ -161,24 +166,42 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         return null;
     }
 
-    public function sendEmail($subject = 'underpayment', $paidCrypto, $token, $order)
+    public function getAlreadyPaid($orderId) {
+        try {
+            $paybear_payment = Mage::getModel('paybear/payment')->load($orderId, 'order_increment_id');
+            if ($paybear_payment->getPaybearId()) {
+                $token = $paybear_payment->getToken();
+                $rate = $this->getRate($token);
+                $already_paid = Mage::getModel('paybear/paymenttxn')->getTotalPaid($orderId);
+                return round($already_paid*$rate, 2);
+            }
+
+        } catch (Exception $e) {
+
+        }
+
+        return 0;
+    }
+
+    public function sendEmail($subject = 'underpayment', $paidCrypto, $fiat_paid, $token, $order)
     {
         $senderName     = Mage::getStoreConfig('trans_email/ident_general/name');
         $senderEmail    = Mage::getStoreConfig('trans_email/ident_general/email');
 
         $customerName   = $order->getCustomerName();
-        $customerEmail  =  $order->getCustomerEmail();
+        $customerEmail  = $order->getCustomerEmail();
 
         $token = $this->sanitize_token($token);
 
         $fiat_currency = strtoupper($order->getOrderCurrencyCode());
 
         $vars = array(
-            'order' =>$order,
-            'store' => Mage::app()->getStore(),
-            'order_id' => $order->getIncrementId(),
-            'cryptopaid' => $paidCrypto,
-            'token'      => strtoupper( $token ),
+            'order'         => $order,
+            'store'         => Mage::app()->getStore(),
+            'order_id'      => $order->getIncrementId(),
+            'cryptopaid'    => $paidCrypto,
+            'fiat_paid'     => $fiat_paid,
+            'token'         => strtoupper( $token ),
             'fiat_currency' => $fiat_currency
         );
 
@@ -249,5 +272,17 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         $token = strtolower($token);
         $token = preg_replace('/[^a-z0-9:]/', '', $token);
         return $token;
+    }
+
+    public function statusMap($status) {
+        switch ($status) {
+            case 'in_transit':
+                $status = "Shipment status changed to In Transit (" . $crated_time['date'] . " at " . $crated_time['time'] . "). Your shipment is with the carrier and is in transit.";
+                break;
+
+
+        }
+
+        return $status;
     }
 }
