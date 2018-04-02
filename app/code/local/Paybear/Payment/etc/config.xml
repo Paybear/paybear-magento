@@ -74,13 +74,20 @@
 
     <frontend>
         <routers>
-            <pabear>
+            <paybear>
                 <use>standard</use>
                 <args>
                     <module>Paybear_Payment</module>
                     <frontName>paybear</frontName>
                 </args>
-            </pabear>
+            </paybear>
         </routers>
+        <layout>
+            <updates>
+                <paybear_layout module="Paybear_Payment">
+                    <file>paybear.xml</file>
+                </paybear_layout>
+            </updates>
+        </layout>
     </frontend>
 </config>

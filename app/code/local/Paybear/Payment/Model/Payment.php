@@ -308,15 +308,20 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         return $token;
     }
 
-    public function statusMap($status) {
-        switch ($status) {
-            case 'in_transit':
-                $status = "Shipment status changed to In Transit (" . $crated_time['date'] . " at " . $crated_time['time'] . "). Your shipment is with the carrier and is in transit.";
-                break;
+    public function getCurrenciesIconsHtml($size = 5) {
 
+        $currencies = array_slice($this->getCurrencies(), 0, $size);
+        $_html = '';
 
+        if (count($currencies) > 0) {
+            $_html .= '<span class="payment_icons" />';
+            foreach ($currencies as $code =>$currency) {
+                $_html .= sprintf('<img src="%s" alt="%s" width="%spx" height="%spx" />', $currency['icon'], $currency['code'], 25, 25 );
+            }
+            $_html .= '</span>';
         }
 
-        return $status;
+        return $_html;
     }
+
 }
