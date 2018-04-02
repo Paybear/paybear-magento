@@ -183,6 +183,40 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         return 0;
     }
 
+    public function createInvoice($order_id) {
+        $order = Mage::getModel("sales/order")->loadByIncrementId($order_id);
+        try {
+            if(!$order->canInvoice())
+            {
+                Mage::throwException(Mage::helper('core')->__('Cannot create an invoice.'));
+            }
+
+            $invoice = Mage::getModel('sales/service_order', $order)->prepareInvoice();
+
+            if (!$invoice->getTotalQty()) {
+                Mage::throwException(Mage::helper('core')->__('Cannot create an invoice without products.'));
+            }
+
+            $invoice->setRequestedCaptureCase(Mage_Sales_Model_Order_Invoice::CAPTURE_ONLINE);
+            $invoice->register();
+            $transactionSave = Mage::getModel('core/resource_transaction')
+                ->addObject($invoice)
+                ->addObject($invoice->getOrder());
+
+            $transactionSave->save();
+
+            $invoice->setRequestedCaptureCase(
+                Mage_Sales_Model_Order_Invoice::CAPTURE_OFFLINE
+            );
+        }
+        catch (Mage_Core_Exception $e) {
+
+        }
+
+
+
+    }
+
     public function sendEmail($subject = 'underpayment', $paidCrypto, $fiat_paid, $token, $order)
     {
         $senderName     = Mage::getStoreConfig('trans_email/ident_general/name');

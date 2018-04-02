@@ -46,7 +46,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
         if ($paybear_payment->load($orderId, 'order_increment_id')->getPaybearId()) {
             $token = $paybear_payment->getToken();
-            if ($token && $total_paid > 0 && $fiat_value > $underpayment && !$is_overpaid ) {
+            if ($token && $total_paid > 0 && !$is_overpaid ) {
                 $address = $paybear_payment->getSavedAddressByToken(strtolower($token), $paybear_payment->getAddress());
                 $order_overview .= '<div>Selected token - '.strtoupper($token).'</div>';
                 $order_overview .= '<div>Payment address - '.$address.'</div>';
@@ -171,8 +171,18 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
     }
 
     public function callbackAction () {
-        $orderId = $this->getRequest()->getParam('order');
 
+        $params = $this->getRequest()->getParams();
+
+        //$orderId = $this->getRequest()->getParam('order');
+
+        $orderId = $params['order'];
+
+        if (empty($orderId)) {
+            Mage::log('Order id not found.', null, 'callback.log');
+
+            return;
+        }
 
         $order = new Mage_Sales_Model_Order();
         $order->loadByIncrementId($orderId);
@@ -206,7 +216,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
             $params = json_decode($data);
 
-
+            mage::log($data, null, 'callback.log');
 
             $maxConfirmations = $paybear_payment->getMaxConfirmations();
             $invoice = $params->invoice;
@@ -271,13 +281,17 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                             }
                         }
 
-                        $order->setState(Mage_Sales_Model_Order::STATE_PROCESSING);
-                        $message = sprintf('Amount Paid: %s, Blockchain: %s. ', $totalConfirmed, $params->blockchain);
 
-                        $history = $order->addStatusHistoryComment($message, Mage_Sales_Model_Order::STATE_PROCESSING);
+                        if ($order->getStatus() != 'processing') {
+                            $order->setState(Mage_Sales_Model_Order::STATE_PROCESSING);
+                            $message = sprintf('Amount Paid: %s, Blockchain: %s. ', $totalConfirmed, $params->blockchain);
+                            $history = $order->addStatusHistoryComment($message, Mage_Sales_Model_Order::STATE_PROCESSING);
 
-                        $history->setIsCustomerNotified(false);
-                        $order->save();
+                            $history->setIsCustomerNotified(false);
+                            $order->save();
+
+                            $paybear_payment->createInvoice($orderId);
+                        }
 
                         //check overpaid
                         $minoverpaid = Mage::getStoreConfig('payment/paybear/minoverpaymentfiat');
@@ -298,12 +312,14 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                         return;
 
                     } else {
-
                         $orderStatus = Mage::getStoreConfig('payment/paybear/mispaid_status');
-                        $underpaid = round(($toPay- $totalConfirmed)*$paybear_payment->getRate($params->blockchain), 2);
-                        $message = sprintf('Wrong Amount Paid (%s %s is received, %s %s is expected) - %s %s is underpaid', $amountPaid, $params->blockchain, $toPay, $params->blockchain, $currency->getData('currency_code'), $underpaid);
-                        $order->addStatusHistoryComment($message, $orderStatus);
-                        $order->save();
+                        if ($order->getStatus() != $orderStatus) {
+
+                            $underpaid = round(($toPay - $totalConfirmed) * $paybear_payment->getRate($params->blockchain), 2);
+                            $message = sprintf('Wrong Amount Paid (%s %s is received, %s %s is expected) - %s %s is underpaid', $amountPaid, $params->blockchain, $toPay, $params->blockchain, $currency->getData('currency_code'), $underpaid);
+                            $order->addStatusHistoryComment($message, $orderStatus);
+                            $order->save();
+                        }
                     }
 
                 } else {
@@ -312,10 +328,11 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                     $paybear_payment->setPaidAt(date('Y-m-d H:i:s'));
                     $paybear_payment->save();
 
-                    $massage = sprintf('%s Awaiting confirmation. Total Unconfirmed: %s %s', date('Y-m-d H:i:s'), $unconfirmedTotal, $params->blockchain );
-                    $order->addStatusHistoryComment($massage, Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status'));
-                    $order->save();
-
+                    if ($order->getStatus() != Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status')) {
+                        $massage = sprintf('%s Awaiting confirmation. Total Unconfirmed: %s %s', date('Y-m-d H:i:s'), $unconfirmedTotal, $params->blockchain );
+                        $order->addStatusHistoryComment($massage, Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status'));
+                        $order->save();
+                    }
                 }
             }
         }
