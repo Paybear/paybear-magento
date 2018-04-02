@@ -28,7 +28,7 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         return self::$_currencies;
     }
 
-    public function getCurrency($token, $orderId, $protectCode, $getAddress = false)
+    public function getCurrency($token, $orderId, $getAddress = false)
     {
         $token = $this->sanitize_token($token);
         $rate = $this->getRate($token);
@@ -52,12 +52,11 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
 
 
             if ($getAddress) {
-                $currency->address = $this->getTokenAddress($orderId, $protectCode, $token);
+                $currency->address = $this->getTokenAddress($orderId, $token);
             } else {
                 $currency->currencyUrl = Mage::getUrl('paybear/payment/currencies', [
                     'token' => $token,
-                    'order' => $orderId,
-                    'protect_code' => $protectCode
+                    'order' => $orderId
                 ]);
             }
 
@@ -93,7 +92,7 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         return self::$_rates;
     }
 
-    public function getTokenAddress($orderId, $protectCode, $token)
+    public function getTokenAddress($orderId, $token)
     {
         $data = Mage::getModel('paybear/payment')->load($orderId, 'order_increment_id');
         $order = new Mage_Sales_Model_Order();
@@ -123,8 +122,7 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         }
 
         $callbackUrl = Mage::getUrl('paybear/payment/callback', [
-            'order' => $orderId,
-            'protect_code' => $protectCode
+            'order' => $orderId
         ]);
 
         $url = Mage::helper('paybear')->getApiDomain() . sprintf('/v2/%s/payment/%s?token=%s', strtolower($token), urlencode($callbackUrl), $apiSecret);

@@ -38,11 +38,10 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             $payment_status = 'Partial Payment';
         }
 
-        $order_overview = '<div>Order overview #'.$orderId.' ('.$order->getStatus().')</div>';
+        $order_overview = '<div>Order overview #'.$orderId.' </div>';
         $order_overview .= '<div>Payment status - ' . $payment_status . '</div>';
         $is_overpaid = (($total_paid - $order->getGrandTotal()) > $overpayment) ? true : false;
-
-
+        $token = null;
 
         if ($paybear_payment->load($orderId, 'order_increment_id')->getPaybearId()) {
             $token = $paybear_payment->getToken();
@@ -50,22 +49,29 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                 $address = $paybear_payment->getSavedAddressByToken(strtolower($token), $paybear_payment->getAddress());
                 $order_overview .= '<div>Selected token - '.strtoupper($token).'</div>';
                 $order_overview .= '<div>Payment address - '.$address.'</div>';
-                $order_overview .= '<div>Total to pay - ' . $currency_sign . $fiat_value . '</div>';
+                $order_overview .= '<div>Total to pay - ' . $currency_sign . round($order->getGrandTotal(),2) . '</div>';
                 if ($fiat_value > 0) {
-                    $order_overview .= '<div>Paid - '. $currency_sign . $total_paid .' </div>';
+                    $order_overview .= '<div>Paid - '. $currency_sign . round($total_paid,2) .'</div>';
                     $order_overview .= '<div>Left to pay - ' . $currency_sign . round($fiat_value, 2) . '</div>';
                 }
             }
         }
 
+        $currency_url = Mage::getUrl('paybear/payment/currencies', [
+            'order' => $order->getIncrementId()
+        ]);
+
+        if ($token) {
+            $currency_url = Mage::getUrl('paybear/payment/currencies', [
+                'order' => $order->getIncrementId(),
+                'token' => $token
+            ]);
+        }
+
         $block->addData([
-            'currencies' => Mage::getUrl('paybear/payment/currencies', [
-                'order' => $order->getIncrementId(),
-                'protect_code' => $order->getProtectCode()
-            ]),
+            'currencies' => $currency_url,
             'status' => Mage::getUrl('paybear/payment/status', [
-                'order' => $order->getIncrementId(),
-                'protect_code' => $order->getProtectCode()
+                'order' => $order->getIncrementId()
             ]),
             'redirect' => Mage::getUrl('checkout/onepage/success'),
             //'fiat_value' => (float)$order->getGrandTotal(),
@@ -91,7 +97,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             Mage::throwException($this->__('Order not found'));
         }
 
-        $protectCode = $this->getRequest()->get('protect_code');
+
 
         $order = new Mage_Sales_Model_Order();
         $order->loadByIncrementId($orderId);
@@ -99,17 +105,15 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         /** @var Paybear_Payment_Model_Payment $model */
         $model = Mage::getModel('paybear/payment');
 
-        if ($order->getProtectCode() != $protectCode) {
-            Mage::throwException($this->__('Order not found.'));
-        }
 
+        $data = [];
         if ($this->getRequest()->get('token')) {
-            $data = $model->getCurrency($this->getRequest()->get('token'), $orderId, $protectCode, true);
+            $data[] = $model->getCurrency($this->getRequest()->get('token'), $orderId, true);
         } else {
-            $data = [];
+
             $currencies = $model->getCurrencies();
             foreach ($currencies as $token => $currency) {
-                $currency = $model->getCurrency($token, $orderId, $protectCode);
+                $currency = $model->getCurrency($token, $orderId);
                 if ($currency) {
                     $data[] = $currency;
                 }

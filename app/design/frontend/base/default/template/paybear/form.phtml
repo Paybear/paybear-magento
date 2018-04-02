@@ -1,5 +1,6 @@
-<div <?php if (!$this->fiat_value > 0) echo 'style="display:none"'; ?> ><a href="#" class="button" id="paybear-all">Confirm &amp; Pay</a></div>
+
 <div style="padding: 20px 0"><?php echo $this->order_overview; ?></div>
+<div <?php if (!$this->fiat_value > 0) echo 'style="display:none"'; ?> ><a href="#" class="button" id="paybear-all">Pay with Crypto</a></div>
 <div id="paybear" style="display: none"
      data-currencies="<?php echo $this->currencies ?>"
      data-status="<?php echo $this->status ?>"
@@ -9,6 +10,7 @@
      data-currency-sign="<?php echo $this->currency_sign ?>"
      data-min-overpayment-fiat="<?php echo $this->overpayment ?>"
      data-max-underpayment-fiat="<?php echo $this->underpayment ?>"
+     data-autoopen = "true"
 >
     <div class="p30 PayBear-spinner" style="display: none;">
         <p>Loading payment details...</p>
@@ -408,6 +410,12 @@
                 modal: true,
                 enablePoweredBy: false
             });
+        }
+
+        var autoopen = $container.data('autoopen');
+
+        if (autoopen && autoopen === true) {
+            document.getElementById('paybear-all').click();
         }
 
     });
