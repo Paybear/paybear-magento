@@ -16,4 +16,11 @@ class Paybear_Payment_Helper_Data extends Mage_Core_Helper_Abstract {
             return self::API_DOMAIN;
         }
     }
+
+    public function log($data, $file = 'paybear.log') {
+
+        if (Mage::getStoreConfig('payment/paybear/debug')) {
+            Mage::log($data, null, $file);
+        }
+    }
 }

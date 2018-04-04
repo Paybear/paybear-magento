@@ -14,7 +14,7 @@ try {
         ->addColumn('order_increment_id', Varien_Db_Ddl_Table::TYPE_VARCHAR, '20', array())
         ->addColumn('token', Varien_Db_Ddl_Table::TYPE_VARCHAR, 255, array())
         ->addColumn('address', Varien_Db_Ddl_Table::TYPE_TEXT, array())
-        ->addColumn('invoice', Varien_Db_Ddl_Table::TYPE_VARCHAR, 255, array())
+        ->addColumn('invoice', Varien_Db_Ddl_Table::TYPE_TEXT, array())
         ->addColumn('amount', Varien_Db_Ddl_Table::TYPE_DECIMAL, '20,8', array())
         ->addColumn('confirmations', Varien_Db_Ddl_Table::TYPE_TEXT, null, array())
         ->addColumn('max_confirmations', Varien_Db_Ddl_Table::TYPE_TINYINT, null, array())

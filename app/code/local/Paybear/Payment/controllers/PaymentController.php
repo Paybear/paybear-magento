@@ -38,7 +38,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             $payment_status = 'Partial Payment';
         }
 
-        $order_overview = '<div>Order overview #'.$orderId.' </div>';
+        $order_overview  = '<div>Order overview #'.$orderId.' </div>';
         $order_overview .= '<div>Payment status - ' . $payment_status . '</div>';
         $is_overpaid = (($total_paid - $order->getGrandTotal()) > $overpayment) ? true : false;
         $token = null;
@@ -48,7 +48,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             if ($token && $total_paid > 0 && !$is_overpaid ) {
                 $address = $paybear_payment->getSavedAddressByToken(strtolower($token), $paybear_payment->getAddress());
                 $order_overview .= '<div>Selected token - '.strtoupper($token).'</div>';
-                $order_overview .= '<div>Payment address - '.$address.'</div>';
+                $order_overview .= '<div>Payment address - <a href="' . $paybear_payment->getBlockExplorerUrl($token,$address) .'" target="_blank" >'.$address.'</a></div>';
                 $order_overview .= '<div>Total to pay - ' . $currency_sign . round($order->getGrandTotal(),2) . '</div>';
                 if ($fiat_value > 0) {
                     $order_overview .= '<div>Paid - '. $currency_sign . round($total_paid,2) .'</div>';
@@ -61,10 +61,11 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             'order' => $order->getIncrementId()
         ]);
 
-        if ($token) {
+        if ($token && $total_paid>0) {
             $currency_url = Mage::getUrl('paybear/payment/currencies', [
-                'order' => $order->getIncrementId(),
-                'token' => $token
+                'order'      => $order->getIncrementId(),
+                'token'      => $token,
+                'total_paid' => true
             ]);
         }
 
@@ -105,10 +106,12 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         /** @var Paybear_Payment_Model_Payment $model */
         $model = Mage::getModel('paybear/payment');
 
-
-        $data = [];
         if ($this->getRequest()->get('token')) {
-            $data[] = $model->getCurrency($this->getRequest()->get('token'), $orderId, true);
+                if($this->getRequest()->get('total_paid')) {
+                    $data[] = $model->getCurrency($this->getRequest()->get('token'), $orderId, true);
+                }else{
+                    $data   = $model->getCurrency($this->getRequest()->get('token'), $orderId, true);
+                }
         } else {
 
             $currencies = $model->getCurrencies();
@@ -144,8 +147,15 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
         $totalConfirmations = $payment_txn->getTxnConfirmations($orderId);
         $totalConfirmed     = $payment_txn->getTotalConfirmed($orderId, $maxConfirmations);
+        $maxDifference_fiat = Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat');
+        $maxDifference_coins = 0;
 
-        if (($totalConfirmations >= $maxConfirmations) && ($totalConfirmed >= $paybear_payment->amount )) { //set max confirmations
+        if($maxDifference_fiat) {
+            $maxDifference_coins = round($maxDifference_fiat/$paybear_payment->getRate($paybear_payment->getToken()) , 8);
+            $maxDifference_coins = max($maxDifference_coins, 0.00000001);
+        }
+
+        if (($totalConfirmations >= $maxConfirmations) && ($totalConfirmed >= ($paybear_payment->amount - $maxDifference_coins) )) { //set max confirmations
             $data['success'] = true;
         } else {
             $data['success'] = false;
@@ -183,8 +193,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         $orderId = $params['order'];
 
         if (empty($orderId)) {
-            Mage::log('Order id not found.', null, 'callback.log');
-
+            Mage::helper('paybear')->log('Order id not found.', 'callback.log');
             return;
         }
 
@@ -220,10 +229,11 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
             $params = json_decode($data);
 
-            mage::log($data, null, 'callback.log');
+            Mage::helper('paybear')->log('ORDER -'.$orderId, 'callback.log');
+            Mage::helper('paybear')->log($data, 'callback.log');
 
             $maxConfirmations = $paybear_payment->getMaxConfirmations();
-            $invoice = $params->invoice;
+
 
             $maxDifference_fiat = Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat');
             $maxDifference_coins = 0;
@@ -233,7 +243,9 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                 $maxDifference_coins = max($maxDifference_coins, 0.00000001);
             }
 
-            if ($params->invoice == $paybear_payment->invoice) {
+            $invoice = $paybear_payment->getInvoiceByToken($paybear_payment->getToken(), $paybear_payment->getInvoice());
+
+            if ($params->invoice == $invoice) {
 
                 $paybear_payment->setTxn($params, $paybear_payment->getPaybearId());
 
@@ -312,7 +324,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                             $order->save();
                         }
 
-                        echo $invoice; //stop further callbacks
+                        echo $params->invoice; //stop further callbacks
                         return;
 
                     } else {

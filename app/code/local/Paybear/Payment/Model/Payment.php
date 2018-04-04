@@ -135,7 +135,12 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
                 $data->setToken(strtolower($token));
                 $address = array_merge($address, array(strtolower($token)=>$response->data->address));
                 $data->setAddress(json_encode($address));
-                $data->setInvoice($response->data->invoice);
+
+                $invoice = (is_array(json_decode($data->getInvoice(), true))) ? json_decode($data->getInvoice(), true) : array();
+                $invoice = array_merge($invoice, array(strtolower($token)=>$response->data->invoice));
+                //$data->setInvoice($response->data->invoice);
+                $data->setInvoice(json_encode($invoice));
+
                 $data->setAmount($coinsAmount);
                 $data->setMaxConfirmations($currencies[strtolower($token)]['maxConfirmations']);
                 $data->setUpdatedAt(date('Y-m-d H:i:s'));
@@ -162,6 +167,31 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         }
 
         return null;
+    }
+
+    public function getInvoiceByToken($token, $invoice) {
+        try {
+            if ($invoice) {
+                $invoice = json_decode($invoice, true);
+
+                if (array_key_exists($token, $invoice))
+                    return  $invoice[$token];
+            }
+
+        }  catch (Exception $e) {
+            Mage::logException($e);
+        }
+
+        return null;
+    }
+
+    public function getBlockExplorerUrl($token, $address) {
+        $currencies = $this->getCurrencies();
+        foreach ($currencies as $token_code => $currency) {
+            if ($token_code == $token) {
+                return sprintf($currency['blockExplorer'], $address);
+            }
+        }
     }
 
     public function getAlreadyPaid($orderId) {
@@ -314,7 +344,7 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         if (count($currencies) > 0) {
             $_html .= '<span class="payment_icons" />';
             foreach ($currencies as $code =>$currency) {
-                $_html .= sprintf('<img src="%s" alt="%s" width="%spx" height="%spx" />', $currency['icon'], $currency['code'], 25, 25 );
+                $_html .= sprintf('<img src="%s" alt="%s" width="%spx" height="%spx" />', $currency['icon'], $currency['code'], 30, 30 );
             }
             $_html .= '</span>';
         }

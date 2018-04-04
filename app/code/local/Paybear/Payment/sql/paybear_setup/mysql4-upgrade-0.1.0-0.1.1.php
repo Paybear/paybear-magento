@@ -31,10 +31,6 @@ $installer->startSetup();
 
 $installer->run("
 ALTER TABLE {$installer->getTable('paybear/payment')}
-    ADD COLUMN coins_paid_unconfirmed TEXT AFTER amount;
-ALTER TABLE {$installer->getTable('paybear/payment')}
-    ADD COLUMN coins_paid_confirmed TEXT AFTER coins_paid_unconfirmed;
-ALTER TABLE {$installer->getTable('paybear/payment')}
     ADD COLUMN email_status tinyint;
 ");
 
