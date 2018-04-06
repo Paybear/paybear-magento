@@ -15,6 +15,15 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
         $this->loadLayout();
 
+        //send new order email
+        if ($order->getCanSendNewEmailFlag()) {
+            try {
+                $order->queueNewOrderEmail();
+            } catch (Exception $e) {
+                Mage::logException($e);
+            }
+        }
+
         /** @var Paybear_Payment_Model_Payment $model */
         $paybear_payment = Mage::getModel('paybear/payment');
         $currency_sign   = Mage::app()->getLocale()->currency($order->getOrderCurrencyCode())->getSymbol();
@@ -23,22 +32,25 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
         $block = $this->getLayout()->createBlock('Mage_Core_Block_Template','paybear',array('template' => 'paybear/form.phtml'));
         $total_paid = $paybear_payment->getAlreadyPaid($orderId);
-        $fiat_value = max((float)$order->getGrandTotal() - $total_paid, 0);
+        $fiat_value = round(max((float)$order->getGrandTotal() - $total_paid, 0), 2);
 
         $payment_status = 'Pending Payment';
         //$payment_status = Mage::getModel('sales/order_status')->load($order->getStatus(), 'status')->getLabel();
         $status = $order->getStatus();
-        if ($status == 'complete' || $status == 'processing') {
+        $button_html = '<a href="#" class="button" id="paybear-all">Pay with Crypto</a>';
+        if ($status == 'complete' || $status == 'processing' ) {
             $payment_status = 'Paid';
+            $button_html = '<a href="' . Mage::getUrl('checkout/onepage/success') .'" class="button" >Continue</a>';
         }
 
-        if ($status == 'awaiting_confirmations' && ($total_paid - $fiat_value) < $underpayment) {
+        if ($status == 'awaiting_confirmations' && ($fiat_value < $underpayment)) {
             $payment_status = 'Waiting for Confirmations';
+            $button_html = '<a href="" class="button" >Refresh</a>';
         } elseif ($status == 'mispaid' || ($total_paid > 0 && ($fiat_value > $underpayment) )) {
             $payment_status = 'Partial Payment';
         }
 
-        $order_overview  = '<div>Order overview #'.$orderId.' </div>';
+        $order_overview  = '<div>Order overview #'.$orderId.'</div>';
         $order_overview .= '<div>Payment status - ' . $payment_status . '</div>';
         $is_overpaid = (($total_paid - $order->getGrandTotal()) > $overpayment) ? true : false;
         $token = null;
@@ -50,12 +62,14 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                 $order_overview .= '<div>Selected token - '.strtoupper($token).'</div>';
                 $order_overview .= '<div>Payment address - <a href="' . $paybear_payment->getBlockExplorerUrl($token,$address) .'" target="_blank" >'.$address.'</a></div>';
                 $order_overview .= '<div>Total to pay - ' . $currency_sign . round($order->getGrandTotal(),2) . '</div>';
-                if ($fiat_value > 0) {
-                    $order_overview .= '<div>Paid - '. $currency_sign . round($total_paid,2) .'</div>';
+                $order_overview .= '<div>Paid - '. $currency_sign . round($total_paid,2) .'</div>';
+                if (($fiat_value > 0) && $fiat_value > $underpayment && ($total_paid > 0)) {
                     $order_overview .= '<div>Left to pay - ' . $currency_sign . round($fiat_value, 2) . '</div>';
                 }
             }
         }
+
+        $order_overview .= '<br/>' . $button_html;
 
         $currency_url = Mage::getUrl('paybear/payment/currencies', [
             'order' => $order->getIncrementId()
@@ -291,7 +305,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
                             $fiatPaid = $totalConfirmed * $paybear_payment->getRate($params->blockchain);
                             if ((float) $fiatPaid < $order->getData('grand_total')) {
-                                $message = sprintf('Late Payment / Rate changed (%s %s paid, %s %s expected)', round($fiatPaid,2), $currency->getData('currency_code'), $order->getData('grand_total'), $currency->getData('currency_code'));
+                                $message = sprintf('Late Payment / Rate changed (%s %s paid, %s %s expected)', round($fiatPaid,2), $currency->getData('currency_code'), round($order->getData('grand_total'),2), $currency->getData('currency_code'));
                                 $order->addStatusHistoryComment($message, $orderStatus);
                                 $order->save();
                             }

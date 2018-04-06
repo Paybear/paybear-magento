@@ -12,10 +12,11 @@ $emailTemplate = Mage::getModel('core/email_template')->loadByCode($templateId);
 
 if(!$emailTemplate->getId()){
     $sql = "INSERT INTO {$this->getTable('core_email_template')} (template_code, template_text, template_type, template_subject, template_sender_name, template_sender_email, added_at, modified_at) VALUES
-    ('$templateId', '<body style=\"background:#FFFFFF; font-family:Verdana, Arial, Helvetica, sans-serif; font-size:12px; margin:0; padding:0;\">
+    ('$templateId', '{{template config_path=\"design/email/header\"}}
+{{inlinecss file=\"email-inline.css\"}}<body style=\"background:#FFFFFF; font-family:Verdana, Arial, Helvetica, sans-serif; font-size:12px; margin:0; padding:0;\">
 <div style=\"background:#FFFFFF; font-family:Verdana, Arial, Helvetica, sans-serif; font-size:12px; margin:0; padding:0;\">
 
-<p>Whoops, you overpaid {{var cryptopaid}} {{var token}} ({{var fiat_paid}} {{var fiat_currency}}) </p>
+<p>Whoops, you overpaid {{var cryptopaid}} {{var token}} ( about {{var fiat_paid}} {{var fiat_currency}}) </p>
 
 <p>Don\'t worry, here is what to do next:</p>
 
@@ -32,7 +33,7 @@ if(!$emailTemplate->getId()){
 <p>Tip 3) Be sure to successfully send your payment before the countdown timer expires.
 This timer is setup to lock in a fixed rate for your payment. Once it expires, rates may change.</p>
 </div>
-</body>', 2, '{{var store.getFrontendName()}}: Order {{htmlescape var=\$order.getIncrementId()}}: Important Note', NULL, NULL, NOW(), NOW());";
+</body>{{template config_path=\"design/email/footer\"}}', 2, '{{var store.getFrontendName()}}: Order {{htmlescape var=\$order.getIncrementId()}}: Important Note', NULL, NULL, NOW(), NOW());";
 
     $installer->run($sql);
 }

@@ -1,6 +1,5 @@
-
+<?php mage::log($this->currencies, null,'cyr.log'); ?>
 <div style="padding: 20px 0"><?php echo $this->order_overview; ?></div>
-<div <?php if (!$this->fiat_value > 0) echo 'style="display:none"'; ?> ><a href="#" class="button" id="paybear-all">Pay with Crypto</a></div>
     <div id="paybear" style="display: none"
          data-currencies="<?php echo $this->currencies ?>"
          data-status="<?php echo $this->status ?>"
@@ -408,15 +407,20 @@
                 minOverpaymentFiat: $container.data('min-overpayment-fiat'),
                 maxUnderpaymentFiat: parseFloat($container.data('max-underpayment-fiat')),
                 modal: true,
-                enablePoweredBy: false
+                enablePoweredBy: true,
+                enableFiatTotal: true,
+                redirectTimeout: 0
             });
         }
 
         var autoopen = $container.data('autoopen');
 
-        if (autoopen && autoopen === true) {
-            document.getElementById('paybear-all').click();
+        if (document.getElementById('paybear-all')) {
+            if (autoopen && autoopen === true) {
+                document.getElementById('paybear-all').click();
+            }
         }
+
 
     });
 </script>

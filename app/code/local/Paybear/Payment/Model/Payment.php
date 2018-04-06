@@ -38,18 +38,21 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
             $order->loadByIncrementId($orderId);
             $fiatValue = (float)$order->getGrandTotal();
 
-            if ($already_paid = $this->getAlreadyPaid($orderId,$rate)) {
+            /*if ($already_paid = $this->getAlreadyPaid($orderId)) {
                 $fiatValue = $fiatValue - $already_paid;
-            }
+            }*/
 
             $coinsValue = round($fiatValue / $rate, 8);
 
             $currencies = $this->getCurrencies();
             $currency = (object) $currencies[strtolower($token)];
             $currency->coinsValue = $coinsValue;
+            //$currency->coinsPaid =  round($already_paid / $rate, 8); //todo ?
             //$currency->rate = round($currency->rate, 2);
             $currency->rate = round($rate, 2);
-
+            if ($coinsPaid = $this->getAlreadyPaidCoins($orderId) ) {
+                $currency->coinsPaid = round($coinsPaid, 8);
+            }
 
             if ($getAddress) {
                 $currency->address = $this->getTokenAddress($orderId, $token);
@@ -209,6 +212,23 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         }
 
         return 0;
+    }
+
+    public function getAlreadyPaidCoins ($orderId) {
+        try {
+            $paybear_payment = Mage::getModel('paybear/payment')->load($orderId, 'order_increment_id');
+            if ($paybear_payment->getPaybearId()) {
+
+                $already_paid = Mage::getModel('paybear/paymenttxn')->getTotalPaid($orderId);
+                return $already_paid;
+            }
+
+        } catch (Exception $e) {
+
+        }
+
+        return 0;
+
     }
 
     public function createInvoice($order_id) {
