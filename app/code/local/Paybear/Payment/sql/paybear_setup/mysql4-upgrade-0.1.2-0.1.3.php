@@ -20,7 +20,7 @@ if(!$emailTemplate->getId()){
 
 <p>Don\'t worry, here is what to do next:</p>
 
-<p>To get your overpayment refunded, please contact the merchant directly and share your Order ID %s and %s Address to send your refund to.</p>
+<p>To get your overpayment refunded, please contact the merchant directly and share your Order ID {{htmlescape var=\$order.getIncrementId()}} and {{var token}} Address to send your refund to.</p>
 
 
 <p>Tips for Paying with Crypto:</p>
