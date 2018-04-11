@@ -28,6 +28,15 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         return self::$_currencies;
     }
 
+    public function checkPayBearResponse() {
+
+        $url = Mage::helper('paybear')->getApiDomain() . sprintf('/v2/currencies?token=%s', Mage::getStoreConfig('payment/paybear/api_secret'));
+        $response = file_get_contents($url);
+        $data = json_decode($response, true);
+
+        return $data;
+    }
+
     public function getCurrency($token, $orderId, $getAddress = false)
     {
         $token = $this->sanitize_token($token);
