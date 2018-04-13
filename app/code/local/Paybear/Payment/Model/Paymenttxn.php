@@ -62,4 +62,15 @@ class Paybear_Payment_Model_Paymenttxn extends Mage_Core_Model_Abstract
         return $total;
     }
 
+    public function isNewOrder($order_id) {
+        $txns = $this->getCollection()
+            ->addFieldToFilter('order_id', $order_id);
+
+        if ($txns->getSize() > 0) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
 }

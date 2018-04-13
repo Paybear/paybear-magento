@@ -55,24 +55,25 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
 
             $currencies = $this->getCurrencies();
             $currency = (object) $currencies[strtolower($token)];
-            $currency->coinsValue = $coinsValue;
-            //$currency->coinsPaid =  round($already_paid / $rate, 8); //todo ?
-            //$currency->rate = round($currency->rate, 2);
-            $currency->rate = round($rate, 2);
-            if ($coinsPaid = $this->getAlreadyPaidCoins($orderId) ) {
+
+            if ( $coinsValue >= $currency->minimum ) {
+                $currency->coinsValue = $coinsValue;
+
+                $currency->rate = round($rate, 2);
+                $coinsPaid = $this->getAlreadyPaidCoins($orderId);
                 $currency->coinsPaid = round($coinsPaid, 8);
-            }
 
-            if ($getAddress) {
-                $currency->address = $this->getTokenAddress($orderId, $token);
-            } else {
-                $currency->currencyUrl = Mage::getUrl('paybear/payment/currencies', [
-                    'token' => $token,
-                    'order' => $orderId
-                ]);
-            }
+                if ($getAddress) {
+                    $currency->address = $this->getTokenAddress($orderId, $token);
+                } else {
+                    $currency->currencyUrl = Mage::getUrl('paybear/payment/currencies', [
+                        'token' => $token,
+                        'order' => $orderId
+                    ]);
+                }
 
-            return $currency;
+                return $currency;
+            }
 
         }
 

@@ -130,7 +130,12 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
             $currencies = $model->getCurrencies();
             foreach ($currencies as $token => $currency) {
-                $currency = $model->getCurrency($token, $orderId);
+                if (count($currencies) == 1) {
+                    $currency = $model->getCurrency($token, $orderId, true);
+                }else{
+                    $currency = $model->getCurrency($token, $orderId);
+                }
+
                 if ($currency) {
                     $data[] = $currency;
                 }
@@ -243,7 +248,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
             $params = json_decode($data);
 
-            Mage::helper('paybear')->log('ORDER -'.$orderId, 'callback.log');
+            Mage::helper('paybear')->log('ORDER - '.$orderId, 'callback.log');
             Mage::helper('paybear')->log($data, 'callback.log');
 
             $maxConfirmations = $paybear_payment->getMaxConfirmations();
@@ -260,6 +265,13 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             $invoice = $paybear_payment->getInvoiceByToken($paybear_payment->getToken(), $paybear_payment->getInvoice());
 
             if ($params->invoice == $invoice) {
+
+                $isNewPayment = $payment_txn->isNewOrder($orderId);
+
+                if ($isNewPayment) {
+                    $paybear_payment->setPaidAt(date('Y-m-d H:i:s'));
+                    $paybear_payment->save();
+                }
 
                 $paybear_payment->setTxn($params, $paybear_payment->getPaybearId());
 
@@ -354,9 +366,6 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
                 } else {
                     $unconfirmedTotal = $payment_txn->getTotalUnconfirmed($orderId, $maxConfirmations);
-
-                    $paybear_payment->setPaidAt(date('Y-m-d H:i:s'));
-                    $paybear_payment->save();
 
                     if ($order->getStatus() != Mage::getStoreConfig('payment/paybear/awaiting_confirmations_status')) {
                         $massage = sprintf('%s Awaiting confirmation. Total Unconfirmed: %s %s', date('Y-m-d H:i:s'), $unconfirmedTotal, $params->blockchain );
