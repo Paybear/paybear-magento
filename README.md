@@ -19,6 +19,8 @@ Once registered, you can manage the currencies you want to integrate in the Memb
  5. Click on "Magento Connect Manager". If necessary: Log in with your initials again
  6. Select the field "Direct package file upload"
  7. Upload PayBear Payments plugin file and click "Upload" button
+ 8. Go to System → Configuration → Payment Methods -> Paybear Payment
+ 9. Select Enabled -> Yes and add Api Key
 
 ### What to use as a payout address?
 You will need payout addresses for all crypto currencies you want to accept. Only you will have access to your payout wallets.
