@@ -47,16 +47,16 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
             $order->loadByIncrementId($orderId);
             $fiatValue = (float)$order->getGrandTotal();
 
-            /*if ($already_paid = $this->getAlreadyPaid($orderId)) {
-                $fiatValue = $fiatValue - $already_paid;
-            }*/
-
             $coinsValue = round($fiatValue / $rate, 8);
 
             $currencies = $this->getCurrencies();
             $currency = (object) $currencies[strtolower($token)];
 
-            if ( $coinsValue >= $currency->minimum ) {
+            $maximum = true;
+            if ($currency->maximum > 0 && $coinsValue > $currency->maximum) $maximum = false;
+
+            if (( $coinsValue >= $currency->minimum ) && $maximum ) {
+
                 $currency->coinsValue = $coinsValue;
 
                 $currency->rate = round($rate, 2);
