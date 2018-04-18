@@ -2,7 +2,7 @@
 <config>
     <modules>
         <Paybear_Payment>
-            <version>0.1.5</version>
+            <version>0.1.6</version>
         </Paybear_Payment>
     </modules>
     <global>
