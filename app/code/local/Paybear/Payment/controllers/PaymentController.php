@@ -27,8 +27,11 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         /** @var Paybear_Payment_Model_Payment $model */
         $paybear_payment = Mage::getModel('paybear/payment');
         $currency_sign   = Mage::app()->getLocale()->currency($order->getOrderCurrencyCode())->getSymbol();
-        $overpayment     = max(Mage::getStoreConfig('payment/paybear/minoverpaymentfiat'), 0);
-        $underpayment    = max(Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat'), 0);
+        $overpayment     = Mage::getStoreConfig('payment/paybear/minoverpaymentfiat');
+        $overpayment     = !empty($overpayment) ? $overpayment : 1;
+
+        $underpayment    = Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat');
+        $underpayment    = !empty($underpayment) ? $underpayment : 0.01;
 
         $block = $this->getLayout()->createBlock('Mage_Core_Block_Template','paybear',array('template' => 'paybear/form.phtml'));
         $total_paid = $paybear_payment->getAlreadyPaid($orderId);
@@ -167,6 +170,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         $totalConfirmations = $payment_txn->getTxnConfirmations($orderId);
         $totalConfirmed     = $payment_txn->getTotalConfirmed($orderId, $maxConfirmations);
         $maxDifference_fiat = Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat');
+        $maxDifference_fiat    = !empty($maxDifference_fiat) ? $maxDifference_fiat : 0.01;
         $maxDifference_coins = 0;
 
         if($maxDifference_fiat) {
@@ -255,6 +259,8 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
 
             $maxDifference_fiat = Mage::getStoreConfig('payment/paybear/maxunderpaymentfiat');
+            $maxDifference_fiat = !empty($maxDifference_fiat) ? $maxDifference_fiat : 0.01;
+
             $maxDifference_coins = 0;
 
             if($maxDifference_fiat) {
@@ -337,6 +343,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
 
                         //check overpaid
                         $minoverpaid = Mage::getStoreConfig('payment/paybear/minoverpaymentfiat');
+                        $minoverpaid = !empty($minoverpaid) ? $minoverpaid : 1;
                         $overpaid    =  (round(($totalConfirmed - $toPay)*$paybear_payment->getRate($params->blockchain), 2));
                         if ( ($minoverpaid > 0) && ($overpaid > $minoverpaid) ) {
 
