@@ -12,7 +12,7 @@ Once registered, you can manage the currencies you want to integrate in the Memb
 <h3>How to install</h3>
 
  
- 1. Download the latest version of the integration: https://github.com/Paybear/paybear-magento/releases/
+ 1. Download the latest version of the integration: https://github.com/Paybear/paybear-magento/releases/download/v0.9.2/Paybear_Payment-0.1.7.tgz
  2. Log in to your Magento Administration page as administrator
  3. Click on "System" in the top menu
  4. Click on "Magento Connect"
