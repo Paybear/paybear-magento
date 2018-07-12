@@ -40,11 +40,14 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
     public function getCurrency($token, $orderId, $getAddress = false)
     {
         $token = $this->sanitize_token($token);
-        $rate = $this->getRate($token);
+        $order = new Mage_Sales_Model_Order();
+        $order->loadByIncrementId($orderId);
+
+        $rate = $this->getRate($token, $order->getOrderCurrencyCode());
 
         if ($rate) {
-            $order = new Mage_Sales_Model_Order();
-            $order->loadByIncrementId($orderId);
+
+
             $fiatValue = (float)$order->getGrandTotal();
 
             $coinsValue = round($fiatValue / $rate, 8);
@@ -80,12 +83,56 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         return null;
     }
 
-    public function getRate($curCode)
+    public function getRate($curCode, $order_currency_code)
     {
-        $rates = $this->getRates();
         $curCode = strtolower($curCode);
+        $order_currency_code = strtolower($order_currency_code);
+        if ($curCode == $order_currency_code)
+            return 1;
+
+        /**
+         * Check, is order currency crypto ?
+         */
+        if (in_array($order_currency_code, $this->getCryptoCurrencies())) {
+
+            $rateCryptoToCrypto = $this->getCryptoToCrypto($curCode, $order_currency_code);
+
+            return $rateCryptoToCrypto;
+
+        }
+
+        $rates = $this->getRates($curCode);
 
         return isset($rates->$curCode) ? $rates->$curCode->mid : false;
+    }
+
+    /**
+     * Get Cryptocurrency codes
+     * @return array
+     */
+    public function getCryptoCurrencies() {
+        return array_keys($this->getCurrencies());
+    }
+
+    /**
+     * Get rate of one cryptocurrency to another cryptocurrency
+     * @param $curCode
+     * @param $order_currency_code
+     * @return bool|float|int
+     */
+    public function getCryptoToCrypto($curCode, $order_currency_code) {
+
+        // get USD rates
+        $rates = $this->getRates('usd');
+
+        $curCodeRate = ($rates[$curCode]) ? $rates[$curCode]['mid'] : null;
+        $orderCurrencyRate = ($rates[$order_currency_code]) ? $rates[$order_currency_code]['mid'] : null;
+
+        if (($curCodeRate > 0) && ($orderCurrencyRate > 0)) {
+            return $curCodeRate/$orderCurrencyRate;
+        }
+
+        return false;
     }
 
     public function getRates()
@@ -114,7 +161,7 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         $apiSecret = Mage::getStoreConfig('payment/paybear/api_secret');
         $currencies = $this->getCurrencies();
         $token = $this->sanitize_token($token);
-        $rate = $this->getRate($token);
+        $rate = $this->getRate($token, $order->getOrderCurrencyCode());
         $fiatAmount = $order->getGrandTotal();
         $coinsAmount = round($fiatAmount / $rate, 8);
 
@@ -207,12 +254,12 @@ class Paybear_Payment_Model_Payment extends Mage_Core_Model_Abstract
         }
     }
 
-    public function getAlreadyPaid($orderId) {
+    public function getAlreadyPaid($orderId, $order_currency_code) {
         try {
             $paybear_payment = Mage::getModel('paybear/payment')->load($orderId, 'order_increment_id');
             if ($paybear_payment->getPaybearId()) {
                 $token = $paybear_payment->getToken();
-                $rate = $this->getRate($token);
+                $rate = $this->getRate($token, $order_currency_code);
                 $already_paid = Mage::getModel('paybear/paymenttxn')->getTotalPaid($orderId);
                 return round($already_paid*$rate, 2);
             }

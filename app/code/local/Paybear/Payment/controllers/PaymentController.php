@@ -6,9 +6,11 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
     {
         $order = new Mage_Sales_Model_Order();
         $orderId = Mage::getSingleton('checkout/session')->getLastRealOrderId();
-
+        
         if (!$orderId) {
-            Mage::throwException($this->__('Order not found'));
+            Mage::log('Order not found');
+            $this->_redirect("/");
+            return;
         }
 
         $order->loadByIncrementId($orderId);
@@ -34,7 +36,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         $underpayment    = !empty($underpayment) ? $underpayment : 0.01;
 
         $block = $this->getLayout()->createBlock('Mage_Core_Block_Template','paybear',array('template' => 'paybear/form.phtml'));
-        $total_paid = $paybear_payment->getAlreadyPaid($orderId);
+        $total_paid = $paybear_payment->getAlreadyPaid($orderId, $order->getOrderCurrencyCode());
         $fiat_value = round(max((float)$order->getGrandTotal() - $total_paid, 0), 2);
 
         $payment_status = 'Pending Payment';
@@ -86,6 +88,8 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             ]);
         }
 
+        $exchange_locktime = Mage::getStoreConfig('payment/paybear/exchange_locktime') * 60;
+
         $block->addData([
             'currencies' => $currency_url,
             'status' => Mage::getUrl('paybear/payment/status', [
@@ -98,7 +102,8 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             'currency_sign' => $currency_sign,
             'overpayment' => $overpayment,
             'underpayment' => $underpayment,
-            'order_overview' => $order_overview
+            'order_overview' => $order_overview,
+            'exchange_locktime' => !empty($exchange_locktime) ? $exchange_locktime : 15*60
         ]);
 
         $this->getLayout()->getBlock('head')->addCss('css/paybear.css');
@@ -174,7 +179,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
         $maxDifference_coins = 0;
 
         if($maxDifference_fiat) {
-            $maxDifference_coins = round($maxDifference_fiat/$paybear_payment->getRate($paybear_payment->getToken()) , 8);
+            $maxDifference_coins = round($maxDifference_fiat/$paybear_payment->getRate($paybear_payment->getToken(), $order->getOrderCurrencyCode()) , 8);
             $maxDifference_coins = max($maxDifference_coins, 0.00000001);
         }
 
@@ -197,7 +202,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             $email_flag   =  $paybear_payment->getEmailStatus();
             if (($underpayment > 0) && (empty($email_flag))) {
 
-                if ($paybear_payment->sendEmail('underpayment', $underpayment, round($underpayment * $paybear_payment->getRate($paybear_payment->getToken()),2), $paybear_payment->getToken(), $order )) {
+                if ($paybear_payment->sendEmail('underpayment', $underpayment, round($underpayment * $paybear_payment->getRate($paybear_payment->getToken(), $order->getOrderCurrencyCode()),2), $paybear_payment->getToken(), $order )) {
                     $paybear_payment->setEmailStatus(1);
                     $paybear_payment->save();
                 }
@@ -264,7 +269,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
             $maxDifference_coins = 0;
 
             if($maxDifference_fiat) {
-                $maxDifference_coins = round($maxDifference_fiat/$paybear_payment->getRate($params->blockchain) , 8);
+                $maxDifference_coins = round($maxDifference_fiat/$paybear_payment->getRate($params->blockchain, $order->getOrderCurrencyCode()) , 8);
                 $maxDifference_coins = max($maxDifference_coins, 0.00000001);
             }
 
@@ -321,7 +326,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                         if ($paymentTimestamp > $deadline) {
                             $orderStatus = Mage::getStoreConfig('payment/paybear/late_payment_status');
 
-                            $fiatPaid = $totalConfirmed * $paybear_payment->getRate($params->blockchain);
+                            $fiatPaid = $totalConfirmed * $paybear_payment->getRate($params->blockchain, $order->getOrderCurrencyCode());
                             if ((float) $fiatPaid < $order->getData('grand_total')) {
                                 $message = sprintf('Late Payment / Rate changed (%s %s paid, %s %s expected)', round($fiatPaid,2), $currency->getData('currency_code'), round($order->getData('grand_total'),2), $currency->getData('currency_code'));
                                 $order->addStatusHistoryComment($message, $orderStatus);
@@ -344,7 +349,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                         //check overpaid
                         $minoverpaid = Mage::getStoreConfig('payment/paybear/minoverpaymentfiat');
                         $minoverpaid = !empty($minoverpaid) ? $minoverpaid : 1;
-                        $overpaid    =  (round(($totalConfirmed - $toPay)*$paybear_payment->getRate($params->blockchain), 2));
+                        $overpaid    =  (round(($totalConfirmed - $toPay)*$paybear_payment->getRate($params->blockchain, $order->getOrderCurrencyCode()), 2));
                         if ( ($minoverpaid > 0) && ($overpaid > $minoverpaid) ) {
 
                             if ($paybear_payment->sendEmail('overpayment', $totalConfirmed - $toPay, $overpaid, $paybear_payment->getToken(), $order )) {
@@ -364,7 +369,7 @@ class Paybear_Payment_PaymentController extends Mage_Core_Controller_Front_Actio
                         $orderStatus = Mage::getStoreConfig('payment/paybear/mispaid_status');
                         if ($order->getStatus() != $orderStatus) {
 
-                            $underpaid = round(($toPay - $totalConfirmed) * $paybear_payment->getRate($params->blockchain), 2);
+                            $underpaid = round(($toPay - $totalConfirmed) * $paybear_payment->getRate($params->blockchain, $order->getOrderCurrencyCode()), 2);
                             $message = sprintf('Wrong Amount Paid (%s %s is received, %s %s is expected) - %s %s is underpaid', $amountPaid, $params->blockchain, $toPay, $params->blockchain, $currency->getData('currency_code'), $underpaid);
                             $order->addStatusHistoryComment($message, $orderStatus);
                             $order->save();
